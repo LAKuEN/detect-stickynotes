@@ -1,4 +1,4 @@
-package sticky
+package stickynote
 
 import (
 	"image"
@@ -9,16 +9,16 @@ import (
 	"gocv.io/x/gocv"
 )
 
-// Sticky は付箋の検出位置を描画した画像と
+// StickyNote は付箋の検出位置を描画した画像と
 // 切り抜いた画像の配列を内包する構造体です。
-type Sticky struct {
+type StickyNote struct {
 	DrawedImg   gocv.Mat
 	CroppedImgs []gocv.Mat
 }
 
 // CutNDraw は画像内から付箋を検出し、付箋の位置を描画した画像と
-// 付箋を切り抜いた画像を内包したSticky構造体を返します。
-func CutNDraw(img gocv.Mat) (Sticky, error) {
+// 付箋を切り抜いた画像を内包したStickyNote構造体を返します。
+func CutNDraw(img gocv.Mat) (StickyNote, error) {
 	// 前処理
 	bgrChannels := gocv.Split(img)
 	gChannel := bgrChannels[1]
@@ -71,13 +71,13 @@ func CutNDraw(img gocv.Mat) (Sticky, error) {
 	drawed := img.Clone()
 	gocv.DrawContours(&drawed, choosed, -1, color.RGBA{255, 0, 0, 255}, 3)
 	// * 矩形範囲を切り抜いた画像の作成
-	var stickyImgs []gocv.Mat
+	var imgs []gocv.Mat
 	for _, c := range choosed {
-		stickyImgs = append(stickyImgs,
+		imgs = append(imgs,
 			img.Region(image.Rectangle{c[0], c[2]}))
 	}
 
-	return Sticky{DrawedImg: drawed, CroppedImgs: stickyImgs}, nil
+	return StickyNote{DrawedImg: drawed, CroppedImgs: imgs}, nil
 }
 
 // calcAspectRatio はアスペクト比(短辺に対する長辺の長さの比)を計算します。
