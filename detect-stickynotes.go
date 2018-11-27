@@ -1,6 +1,7 @@
 package stickynote
 
 import (
+	"errors"
 	"image"
 	"image/color"
 	"math"
@@ -21,25 +22,22 @@ type StickyNote struct {
 func CutNDraw(img gocv.Mat) (StickyNote, error) {
 	// 前処理
 	bgrChannels := gocv.Split(img)
-	gChannel := bgrChannels[1]
 	colorspaceChanged := img.Clone()
 	gocv.CvtColor(colorspaceChanged, &colorspaceChanged, gocv.ColorBGRToYUV)
 	yuvChannels := gocv.Split(colorspaceChanged)
-	uChannel := yuvChannels[1]
-	vChannel := yuvChannels[2]
-	gPreprocessed := preprocessingImg(gChannel)
-	uPreprocessed := preprocessingImg(uChannel)
-	vPreprocessed := preprocessingImg(vChannel)
+
+	gPreprocessed := preprocessingImg(bgrChannels[1])
+	// TODO 色差信号はヒストグラムが偏っているのでコントラストが低い
+	// ヒストグラム平坦化を掛けてやれば陰影差が強調されそう
+	uPreprocessed := preprocessingImg(yuvChannels[1])
+	vPreprocessed := preprocessingImg(yuvChannels[2])
 
 	// 検出
-	gContours := gocv.FindContours(gPreprocessed,
-		gocv.RetrievalExternal, gocv.ChainApproxSimple)
-	uContours := gocv.FindContours(uPreprocessed,
-		gocv.RetrievalExternal, gocv.ChainApproxSimple)
-	vContours := gocv.FindContours(vPreprocessed,
-		gocv.RetrievalExternal, gocv.ChainApproxSimple)
-	contours := append(gContours, uContours...)
-	contours = append(contours, vContours...)
+	contours := [][]image.Point{}
+	for _, img := range []gocv.Mat{gPreprocessed, uPreprocessed, vPreprocessed} {
+		cnts := gocv.FindContours(img, gocv.RetrievalExternal, gocv.ChainApproxSimple)
+		contours = append(contours, cnts...)
+	}
 
 	// 閾値処理
 	var choosed [][]image.Point
@@ -47,7 +45,11 @@ func CutNDraw(img gocv.Mat) (StickyNote, error) {
 	if minSideLength > img.Size()[1] {
 		minSideLength = img.Size()[1]
 	}
-	minSideLength = minSideLength / 5
+	// FIXME 下限サイズの指定をユーザーが行えるようにした方がよいかもしれない
+	//       その場合、curlでの操作では厳しいので、WebページをIFとして作らないとまずい
+	minSizeRatio := .1
+	minSideLength = int(float64(minSideLength) * minSizeRatio)
+	aspectRatioThresh := 1.1 // 基底のアスペクト比からどの程度外れたものまで取るか
 	for _, contour := range contours {
 		minY, maxY, minX, maxX := extractMinMaxCoordinates(img, contour)
 		lengthX := (maxX - minX)
@@ -55,7 +57,6 @@ func CutNDraw(img gocv.Mat) (StickyNote, error) {
 		if !isEnoughSizeRect(lengthX, lengthY, minSideLength, img) {
 			continue
 		}
-		aspectRatioThresh := 1.1
 		if aspectRatioThresh < calcAspectRatio(lengthX, lengthY) {
 			continue
 		}
@@ -65,6 +66,9 @@ func CutNDraw(img gocv.Mat) (StickyNote, error) {
 		choosed = append(choosed, c)
 	}
 	choosed = combineContours(choosed)
+	if len(choosed) < 1 {
+		return StickyNote{DrawedImg: gocv.NewMat(), CroppedImgs: []gocv.Mat{}}, errors.New("Cannot detect any stickies")
+	}
 
 	// 画像の作成
 	// * 矩形を描画した画像の作成
@@ -235,7 +239,24 @@ func preprocessingImg(grayImg gocv.Mat) gocv.Mat {
 	preprocessed := grayImg.Clone()
 	gocv.AdaptiveThreshold(preprocessed, &preprocessed, 255,
 		gocv.AdaptiveThresholdGaussian,
+		// gocv.ThresholdBinaryInv, 11, 1)
 		gocv.ThresholdBinaryInv, 51, 1)
 
 	return preprocessed
+}
+
+func getLUT() gocv.Mat {
+	l := gocv.NewMatWithSize(1, 256, gocv.MatTypeCV8U)
+	thresh := 50
+	steps := 255 - thresh
+	inc := 255.0 / float32(steps)
+	for i := 0; i < 256; i++ {
+		if i < thresh {
+			continue
+		}
+		v := uint8(inc * (float32(i) - float32(thresh)))
+		l.SetUCharAt(0, i, v) // 1段階ごとの増分*指定範囲を0~255と見做したときのindex
+	}
+
+	return l
 }
