@@ -26,15 +26,16 @@ func CutNDraw(img gocv.Mat) (StickyNote, error) {
 	gocv.CvtColor(colorspaceChanged, &colorspaceChanged, gocv.ColorBGRToYUV)
 	yuvChannels := gocv.Split(colorspaceChanged)
 
-	gPreprocessed := preprocessingImg(bgrChannels[1])
-	// TODO 色差信号はヒストグラムが偏っているのでコントラストが低い
-	// ヒストグラム平坦化を掛けてやれば陰影差が強調されそう
-	uPreprocessed := preprocessingImg(yuvChannels[1])
-	vPreprocessed := preprocessingImg(yuvChannels[2])
+	var preprocessedImgs []gocv.Mat
+	for _, c := range []gocv.Mat{bgrChannels[1], yuvChannels[1], yuvChannels[2]} {
+		// TODO 色差信号はヒストグラムが偏っているのでコントラストが低い
+		// ヒストグラム平坦化を掛けてやれば陰影差が強調されそう
+		preprocessedImgs = append(preprocessedImgs, preprocessingImg(c))
+	}
 
 	// 検出
 	contours := [][]image.Point{}
-	for _, img := range []gocv.Mat{gPreprocessed, uPreprocessed, vPreprocessed} {
+	for _, img := range preprocessedImgs {
 		cnts := gocv.FindContours(img, gocv.RetrievalExternal, gocv.ChainApproxSimple)
 		contours = append(contours, cnts...)
 	}
@@ -239,24 +240,23 @@ func preprocessingImg(grayImg gocv.Mat) gocv.Mat {
 	preprocessed := grayImg.Clone()
 	gocv.AdaptiveThreshold(preprocessed, &preprocessed, 255,
 		gocv.AdaptiveThresholdGaussian,
-		// gocv.ThresholdBinaryInv, 11, 1)
 		gocv.ThresholdBinaryInv, 51, 1)
 
 	return preprocessed
 }
 
-func getLUT() gocv.Mat {
-	l := gocv.NewMatWithSize(1, 256, gocv.MatTypeCV8U)
-	thresh := 50
-	steps := 255 - thresh
-	inc := 255.0 / float32(steps)
-	for i := 0; i < 256; i++ {
-		if i < thresh {
-			continue
-		}
-		v := uint8(inc * (float32(i) - float32(thresh)))
-		l.SetUCharAt(0, i, v) // 1段階ごとの増分*指定範囲を0~255と見做したときのindex
-	}
-
-	return l
-}
+// func getLUT() gocv.Mat {
+// 	l := gocv.NewMatWithSize(1, 256, gocv.MatTypeCV8U)
+// 	thresh := 50
+// 	steps := 255 - thresh
+// 	inc := 255.0 / float32(steps)
+// 	for i := 0; i < 256; i++ {
+// 		if i < thresh {
+// 			continue
+// 		}
+// 		v := uint8(inc * (float32(i) - float32(thresh)))
+// 		l.SetUCharAt(0, i, v) // 1段階ごとの増分*指定範囲を0~255と見做したときのindex
+// 	}
+//
+// 	return l
+// }
