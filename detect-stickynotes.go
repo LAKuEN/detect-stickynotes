@@ -50,7 +50,9 @@ func CutNDraw(img gocv.Mat) (StickyNote, error) {
 	//       その場合、curlでの操作では厳しいので、WebページをIFとして作らないとまずい
 	minSizeRatio := .1
 	minSideLength = int(float64(minSideLength) * minSizeRatio)
-	aspectRatioThresh := 1.1 // 基底のアスペクト比からどの程度外れたものまで取るか
+	// FIXME アスペクト比で切ると過剰に除外されてしまうケースがあるのでとりあえず無効化
+	//       いくつかのパターンを持たせて、それに合致するアスペクト比かを検査するように直す(そのうち)
+	// aspectRatioThresh := 1.1 // 基底のアスペクト比からどの程度外れたものまで取るか
 	for _, contour := range contours {
 		minY, maxY, minX, maxX := extractMinMaxCoordinates(img, contour)
 		lengthX := (maxX - minX)
@@ -58,9 +60,9 @@ func CutNDraw(img gocv.Mat) (StickyNote, error) {
 		if !isEnoughSizeRect(lengthX, lengthY, minSideLength, img) {
 			continue
 		}
-		if aspectRatioThresh < calcAspectRatio(lengthX, lengthY) {
-			continue
-		}
+		// if aspectRatioThresh < calcAspectRatio(lengthX, lengthY) {
+		// 	continue
+		// }
 		// 4点の座標を左上から時計回りに格納
 		c := []image.Point{{minX, minY}, {maxX, minY},
 			{maxX, maxY}, {minX, maxY}}
